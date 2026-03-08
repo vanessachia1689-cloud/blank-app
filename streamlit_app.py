@@ -13,7 +13,7 @@ st.set_page_config(page_title="AI短剧剧本生成器", page_icon="🎬", layou
 if "final_script" not in st.session_state:
     st.session_state.final_script = ""
 
-st.title("🎬 AI短剧剧本SOP")
+st.title("🎬 AI短剧剧本SOP【V-Team】")
 st.markdown("⚠️ **机密系统：仅供TT-909 WORK内部项目组使用，请勿外传。**")
 
 st.subheader("📝 请填写剧本设定要素")
