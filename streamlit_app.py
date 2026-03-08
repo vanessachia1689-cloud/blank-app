@@ -8,7 +8,7 @@ DIFY_API_URL = "https://api.dify.ai/v1/workflows/run"
 
 # 页面外观设置
 st.set_page_config(page_title="AI短剧剧本生成器", page_icon="🎬", layout="centered")
-st.title("🎬 北美短剧剧本流水线")
+st.title("🎬 AI短剧剧本撰写SOP")
 st.markdown("⚠️ **机密系统：仅供TT-909 WORK内部项目组使用，请勿外传。**")
 
 st.subheader("📝 请填写剧本设定要素")
