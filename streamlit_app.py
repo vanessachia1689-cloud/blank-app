@@ -63,7 +63,8 @@ if generate_btn:
             }
             
             try:
-                response = requests.post(DIFY_API_URL, headers=headers, json=payload, stream=True)
+                # --- 核心修改：强制设定双重超时，连接等5分钟，数据接收死等2小时 ---
+                response = requests.post(DIFY_API_URL, headers=headers, json=payload, stream=True, timeout=(300, 7200))
                 response.raise_for_status()
                 
                 # 提示流式输出正在进行
