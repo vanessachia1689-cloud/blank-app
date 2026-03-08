@@ -8,7 +8,12 @@ DIFY_API_URL = "https://api.dify.ai/v1/workflows/run"
 
 # 页面外观设置
 st.set_page_config(page_title="AI短剧剧本生成器", page_icon="🎬", layout="centered")
-st.title("🎬 AI短剧剧本撰写SOP")
+
+# --- 必备护城河：装上“记忆芯片”，绝对防止手滑刷新导致几千字剧本消失 ---
+if "final_script" not in st.session_state:
+    st.session_state.final_script = ""
+
+st.title("🎬 北美短剧剧本流水线")
 st.markdown("⚠️ **机密系统：仅供TT-909 WORK内部项目组使用，请勿外传。**")
 
 st.subheader("📝 请填写剧本设定要素")
@@ -31,6 +36,9 @@ if st.button("🚀 开始生成剧本 (流式不断线版)"):
     if not drama_title or not drama_story:
         st.warning("导演，至少得填一下剧名和故事创意呀！")
     else:
+        # 每次点击“开始生成”时，先清空上一次的记忆
+        st.session_state.final_script = ""
+        
         with st.spinner("后台引擎已点火，正在疯狂撰写中... 只要进度条在转就不会断线！"):
             headers = {
                 "Authorization": f"Bearer {DIFY_API_KEY}",
@@ -55,10 +63,8 @@ if st.button("🚀 开始生成剧本 (流式不断线版)"):
                 response = requests.post(DIFY_API_URL, headers=headers, json=payload, stream=True)
                 response.raise_for_status()
                 
-                # --- 核心修改：在顶部预留动作区和分割线 ---
                 st.markdown("### 📜 剧本生成结果")
-                action_box = st.empty()  # 预留给“一键下载”按钮的专属VIP位置
-                st.divider()             # 画一条美观的分割线
+                st.divider()
                 
                 result_box = st.empty()
                 full_result = ""
@@ -78,20 +84,20 @@ if st.button("🚀 开始生成剧本 (流式不断线版)"):
                                 elif json_data.get('event') == 'workflow_finished':
                                     result_box.markdown(full_result) # 去掉光标
                                     
-                                    # --- 核心修改：生成结束后，在顶部的预留位置渲染下载按钮 ---
-                                    # safe_title 用于处理文件名，防止剧名中有特殊字符
-                                    safe_title = drama_title.replace("/", "_").replace("\\", "_")
-                                    action_box.download_button(
-                                        label="📥 一键下载剧本文档 (.md格式，推荐直接导入飞书)",
-                                        data=full_result,
-                                        file_name=f"剧本_{safe_title}.md",
-                                        mime="text/markdown",
-                                        type="primary", # 按钮变成醒目的高亮色
-                                        use_container_width=True # 按钮填满宽度，更容易点击
-                                    )
-                                    
-                                    st.success("✅ 剧本生成完毕！请点击上方红色按钮下载，或手动复制。")
+                                    # 跑完之后，立刻把完整结果死死锁进记忆芯片
+                                    st.session_state.final_script = full_result
                             except json.JSONDecodeError:
                                 continue
             except Exception as e:
                 st.error(f"连接失败，请检查 Dify API 或必填项是否填写完整: {e}")
+
+# --- 专属提取区：只要记忆里有剧本，就展示这个框 ---
+if st.session_state.final_script:
+    st.success("✅ 剧本已生成！请在下方文本框内点击一下，然后按 Ctrl+A (全选) 和 Ctrl+C (复制)，直接粘贴到飞书即可。")
+    
+    # 生成一个自带滚动条、方便全选复制的专用文本框
+    st.text_area(
+        label="👇 剧本一键提取区", 
+        value=st.session_state.final_script, 
+        height=400
+    )
