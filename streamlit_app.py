@@ -110,4 +110,5 @@ if generate_btn:
 if st.session_state.final_script:
     with top_extraction_area.container():
         st.success("✅ 剧本已生成！请点击下方黑框右上角的【两张纸】图标，一键复制后直接粘贴到飞书即可。")
-        st.markdown
+        st.markdown("👇 **剧本一键提取区**")
+        st.code(st.session_state.final_script, language="markdown")
