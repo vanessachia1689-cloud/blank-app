@@ -25,17 +25,14 @@ def clear_form():
         st.session_state[key] = ""
 
 # ================= UI 布局与标题 =================
-# 核心修改：让主标题独占整行，恢复大气排版
 st.title("🎬 AI短剧剧本SOP【V-Team】")
 st.markdown("⚠️ **机密系统：仅供TT-909 WORK内部项目组使用，请勿外传。**")
-st.markdown("<br>", unsafe_allow_html=True) # 增加一点垂直留白让视觉更舒服
+st.markdown("<br>", unsafe_allow_html=True) 
 
-# 核心修改：将小标题和清空按钮并排放在一起
 col_sub, col_clear = st.columns([4, 1])
 with col_sub:
     st.subheader("📝 请填写剧本设定要素")
 with col_clear:
-    # 按钮靠右对齐，与小标题同行
     st.button("🗑️ 一键清空", on_click=clear_form, use_container_width=True)
 
 col1, col2 = st.columns(2)
@@ -95,8 +92,9 @@ if generate_btn:
                 full_result = ""
                 workflow_finished_normally = False 
                 
-                # ⏱️ 渲染节流阀时间戳
-                last_update_time = time.time()
+                # --- 核心修改：为文字和雷达分别设置独立节流阀 ---
+                last_text_update = time.time()
+                last_heartbeat_update = time.time()
                 
                 for line in response.iter_lines():
                     if line:
@@ -107,26 +105,29 @@ if generate_btn:
                                 json_data = json.loads(data_str)
                                 event_type = json_data.get('event')
                                 
-                                # 📡 节点雷达
+                                # 📡 节点雷达 (防洪升级：强制1秒钟最多只刷1次状态)
                                 if event_type == 'node_started':
-                                    node_title = json_data.get('data', {}).get('title', '未知节点')
-                                    heartbeat_box.info(f"⚙️ Dify 底层节点运转中: 【{node_title}】... [时间: {time.strftime('%H:%M:%S')}]")
+                                    if time.time() - last_heartbeat_update > 1.0:
+                                        node_title = json_data.get('data', {}).get('title', '未知节点')
+                                        heartbeat_box.info(f"⚙️ Dify 底层节点运转中: 【{node_title}】... [时间: {time.strftime('%H:%M:%S')}]")
+                                        last_heartbeat_update = time.time()
                                     continue
                                 
-                                # 💓 基础心跳
+                                # 💓 基础心跳 (防洪升级：强制2秒钟只汇报1次心跳)
                                 elif event_type == 'ping':
-                                    heartbeat_box.caption(f"💓 网络通道保持连接中... [最近心跳: {time.strftime('%H:%M:%S')}]")
+                                    if time.time() - last_heartbeat_update > 2.0:
+                                        heartbeat_box.caption(f"💓 网络通道保持连接中... [最近心跳: {time.strftime('%H:%M:%S')}]")
+                                        last_heartbeat_update = time.time()
                                     continue
                                     
-                                # 📝 文本块输出 (加入神级节流阀)
+                                # 📝 文本块输出 (继续保持 0.5秒 节流防崩)
                                 elif event_type == 'text_chunk':
                                     chunk = json_data.get('data', {}).get('text', '')
                                     full_result += chunk
                                     
-                                    # 核心优化：每隔 0.5 秒才刷新一次前端 UI，防止超长文本把浏览器卡崩溃导致断连！
-                                    if time.time() - last_update_time > 0.5:
+                                    if time.time() - last_text_update > 0.5:
                                         result_box.markdown(full_result + " ▌")
-                                        last_update_time = time.time()
+                                        last_text_update = time.time()
                                 
                                 # ❌ 捕获后台报错
                                 elif event_type == 'error':
