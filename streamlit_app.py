@@ -136,6 +136,6 @@ if generate_btn:
 # --- 将提取区装入刚才顶部的“空盒子”里 ---
 if st.session_state.final_script:
     with top_extraction_area.container():
-        st.success("✅ 剧本生成已完成（或已中断）！请点击下方黑框右上角的【两张纸】图标，一键复制后直接粘贴到飞书。")
+        st.success("✅ 剧本生成已完成！请点击下方黑框右上角的【两张纸】图标，一键复制后直接粘贴到飞书。")
         st.markdown("👇 **剧本一键提取区**")
         st.code(st.session_state.final_script, language="markdown")
