@@ -26,7 +26,7 @@ def clear_form():
 
 # ================= UI 布局与标题 =================
 # 核心修改：让主标题独占整行，恢复大气排版
-st.title("🎬 AI短剧30集剧本SOP【V-Team】")
+st.title("🎬 AI短剧剧本SOP【V-Team】")
 st.markdown("⚠️ **机密系统：仅供TT-909 WORK内部项目组使用，请勿外传。**")
 st.markdown("<br>", unsafe_allow_html=True) # 增加一点垂直留白让视觉更舒服
 
