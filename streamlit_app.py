@@ -25,15 +25,18 @@ def clear_form():
         st.session_state[key] = ""
 
 # ================= UI 布局与标题 =================
-col_title, col_btn = st.columns([5, 1])
-with col_title:
-    st.title("🎬 AI短剧剧本SOP【V-Team】")
-    st.markdown("⚠️ **机密系统：仅供TT-909 WORK内部项目组使用，请勿外传。**")
-with col_btn:
-    st.markdown("<div style='margin-top: 15px;'></div>", unsafe_allow_html=True)
-    st.button("🗑️ 一键清空", on_click=clear_form, use_container_width=True)
+# 核心修改：让主标题独占整行，恢复大气排版
+st.title("🎬 AI短剧剧本SOP【V-Team】")
+st.markdown("⚠️ **机密系统：仅供TT-909 WORK内部项目组使用，请勿外传。**")
+st.markdown("<br>", unsafe_allow_html=True) # 增加一点垂直留白让视觉更舒服
 
-st.subheader("📝 请填写剧本设定要素")
+# 核心修改：将小标题和清空按钮并排放在一起
+col_sub, col_clear = st.columns([4, 1])
+with col_sub:
+    st.subheader("📝 请填写剧本设定要素")
+with col_clear:
+    # 按钮靠右对齐，与小标题同行
+    st.button("🗑️ 一键清空", on_click=clear_form, use_container_width=True)
 
 col1, col2 = st.columns(2)
 with col1:
