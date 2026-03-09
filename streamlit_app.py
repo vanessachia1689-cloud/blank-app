@@ -50,7 +50,7 @@ story_background = st.text_area("故事背景 (story_background):", key="story_b
 tiktok_elements = st.text_area("TT核心爆点元素 (tiktok_elements):", key="tiktok_elements", height=100)
 concept_breakdown = st.text_area("创意解析 (concept_breakdown):", key="concept_breakdown", height=100)
 
-generate_btn = st.button("🚀 开始生成剧本 (抗强压不崩溃版)")
+generate_btn = st.button("🚀 开始生成剧本 (防断连版)")
 
 # --- 核心排版魔法：提取区占位 ---
 top_extraction_area = st.empty()
