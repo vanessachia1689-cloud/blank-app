@@ -59,7 +59,7 @@ if generate_btn:
         st.session_state.final_script = ""
         top_extraction_area.empty() 
         
-        with st.spinner("后台引擎已点火，正在疯狂撰写中... 预计耗时较长，请保持网页常亮勿切后台！"):
+        with st.spinner("后台引擎已点火，正在疯狂撰写中... (已开启防断线保护，可安心切换网页)"):
             headers = {
                 "Authorization": f"Bearer {DIFY_API_KEY}",
                 "Content-Type": "application/json"
@@ -79,91 +79,103 @@ if generate_btn:
                 "user": "Vanessa-Team" 
             }
             
-            try:
-                # 4小时超长超时保护
-                response = requests.post(DIFY_API_URL, headers=headers, json=payload, stream=True, timeout=(300, 14400))
-                response.raise_for_status()
-                
-                st.markdown("### 📜 剧本流式输出实时预览")
-                st.divider()
-                
-                result_box = st.empty()
-                heartbeat_box = st.empty()
-                full_result = ""
-                workflow_finished_normally = False 
-                
-                # --- 核心修改：为文字和雷达分别设置独立节流阀 ---
-                last_text_update = time.time()
-                last_heartbeat_update = time.time()
-                
-                for line in response.iter_lines():
-                    if line:
-                        decoded_line = line.decode('utf-8')
-                        if decoded_line.startswith('data:'):
-                            data_str = decoded_line[5:].strip()
-                            try:
-                                json_data = json.loads(data_str)
-                                event_type = json_data.get('event')
-                                
-                                # 📡 节点雷达 (防洪升级：强制1秒钟最多只刷1次状态)
-                                if event_type == 'node_started':
-                                    if time.time() - last_heartbeat_update > 1.0:
-                                        node_title = json_data.get('data', {}).get('title', '未知节点')
-                                        heartbeat_box.info(f"⚙️ Dify 底层节点运转中: 【{node_title}】... [时间: {time.strftime('%H:%M:%S')}]")
-                                        last_heartbeat_update = time.time()
+            # 使用 Session 保持更稳定的连接池
+            with requests.Session() as session:
+                try:
+                    # 4小时超长超时保护
+                    response = session.post(DIFY_API_URL, headers=headers, json=payload, stream=True, timeout=(300, 14400))
+                    response.raise_for_status()
+                    
+                    st.markdown("### 📜 剧本流式输出实时预览")
+                    st.divider()
+                    
+                    result_box = st.empty()
+                    heartbeat_box = st.empty()
+                    full_result = ""
+                    workflow_finished_normally = False 
+                    
+                    # 为文字和雷达分别设置独立节流阀
+                    last_text_update = time.time()
+                    last_heartbeat_update = time.time()
+                    last_save_time = time.time()
+                    
+                    for line in response.iter_lines(decode_unicode=True):
+                        if line:
+                            if line.startswith('data:'):
+                                data_str = line[5:].strip()
+                                try:
+                                    json_data = json.loads(data_str)
+                                    event_type = json_data.get('event')
+                                    
+                                    # 📡 节点雷达
+                                    if event_type == 'node_started':
+                                        if time.time() - last_heartbeat_update > 1.0:
+                                            node_title = json_data.get('data', {}).get('title', '未知节点')
+                                            heartbeat_box.info(f"⚙️ Dify 底层节点运转中: 【{node_title}】... [时间: {time.strftime('%H:%M:%S')}]")
+                                            last_heartbeat_update = time.time()
+                                        continue
+                                    
+                                    # 💓 基础心跳
+                                    elif event_type == 'ping':
+                                        if time.time() - last_heartbeat_update > 2.0:
+                                            heartbeat_box.caption(f"💓 网络通道保持连接中... [最近心跳: {time.strftime('%H:%M:%S')}]")
+                                            last_heartbeat_update = time.time()
+                                        continue
+                                        
+                                    # 📝 文本块输出
+                                    elif event_type == 'text_chunk':
+                                        chunk = json_data.get('data', {}).get('text', '')
+                                        full_result += chunk
+                                        
+                                        current_time = time.time()
+                                        # UI 渲染节流 (0.5秒)
+                                        if current_time - last_text_update > 0.5:
+                                            result_box.markdown(full_result + " ▌")
+                                            last_text_update = current_time
+                                            
+                                        # 🛡️ 核心修改：实时存档防断线！每2秒写入一次 session_state
+                                        if current_time - last_save_time > 2.0:
+                                            st.session_state.final_script = full_result
+                                            last_save_time = current_time
+                                    
+                                    # ❌ 捕获后台报错
+                                    elif event_type == 'error':
+                                        error_msg = json_data.get('message', '未知错误')
+                                        st.error(f"❌ Dify 后台发生错误: {error_msg}")
+                                        workflow_finished_normally = True 
+                                        break
+                                        
+                                    # ✅ 完美结束
+                                    elif event_type == 'workflow_finished':
+                                        heartbeat_box.empty() 
+                                        result_box.markdown(full_result) # 结束时做一次最终的完整渲染
+                                        st.session_state.final_script = full_result
+                                        workflow_finished_normally = True
+                                        break 
+                                        
+                                except json.JSONDecodeError:
                                     continue
-                                
-                                # 💓 基础心跳 (防洪升级：强制2秒钟只汇报1次心跳)
-                                elif event_type == 'ping':
-                                    if time.time() - last_heartbeat_update > 2.0:
-                                        heartbeat_box.caption(f"💓 网络通道保持连接中... [最近心跳: {time.strftime('%H:%M:%S')}]")
-                                        last_heartbeat_update = time.time()
-                                    continue
-                                    
-                                # 📝 文本块输出 (继续保持 0.5秒 节流防崩)
-                                elif event_type == 'text_chunk':
-                                    chunk = json_data.get('data', {}).get('text', '')
-                                    full_result += chunk
-                                    
-                                    if time.time() - last_text_update > 0.5:
-                                        result_box.markdown(full_result + " ▌")
-                                        last_text_update = time.time()
-                                
-                                # ❌ 捕获后台报错
-                                elif event_type == 'error':
-                                    error_msg = json_data.get('message', '未知错误')
-                                    st.error(f"❌ Dify 后台发生错误: {error_msg}")
-                                    workflow_finished_normally = True 
-                                    break
-                                    
-                                # ✅ 完美结束
-                                elif event_type == 'workflow_finished':
-                                    heartbeat_box.empty() 
-                                    result_box.markdown(full_result) # 结束时做一次最终的完整渲染
-                                    st.session_state.final_script = full_result
-                                    workflow_finished_normally = True
-                                    break 
-                                    
-                            except json.JSONDecodeError:
-                                continue
-                
-                # 🚨 捕获由于反向代理等原因造成的强杀
-                if not workflow_finished_normally:
-                    st.error("⚠️ 警告：连接被异常切断！")
-                    st.info("👉 别慌！如果是文本太长导致的超时，Dify 后台此刻**很可能仍在继续写剧本**。\n\n请前往 Dify 工作流后台的【日志追踪】页面查看最终结果。")
-                    if full_result:
-                        st.session_state.final_script = full_result 
+                    
+                    # 🚨 捕获由于反向代理、浏览器休眠等原因造成的强制掐断
+                    if not workflow_finished_normally:
+                        st.warning("⚠️ 前台连接因休眠或网络波动断开，但这不影响大局！")
+                        st.info("👉 Dify 后台大概率仍在继续写剧本。当前已为你保存了断线前的全部文本，完整结果请前往 Dify 工作流后台的【日志追踪】查看。")
+                        if full_result:
+                            st.session_state.final_script = full_result 
 
-            except requests.exceptions.ChunkedEncodingError:
-                st.error("⚠️ 警告：数据流被服务器强制掐断！(这通常是由于生成时间过长，代理服务器断开了连接)。请去 Dify 后台拿结果！")
-                if full_result:
-                    st.session_state.final_script = full_result
-            except Exception as e:
-                st.error(f"连接失败，请检查 Dify API 或必填项是否填写完整: {e}")
+                except (requests.exceptions.ChunkedEncodingError, requests.exceptions.ConnectionError):
+                    st.warning("⚠️ 提示：浏览器切后台导致数据流断开 (通常是休眠引起的)。别担心，Dify 后端仍在运行！")
+                    if full_result:
+                        st.session_state.final_script = full_result
+                        result_box.markdown(full_result)
+                except Exception as e:
+                    st.error(f"连接失败，请检查 Dify API 或必填项是否填写完整: {e}")
+                    if 'full_result' in locals() and full_result:
+                        st.session_state.final_script = full_result
 
 # --- 将提取区装入顶部的“空盒子”里 ---
 if st.session_state.final_script:
     with top_extraction_area.container():
-        st.success("✅ 剧本生成已完成！请点击下方黑框右上角的【两张纸】图标，一键复制后直接粘贴到飞书。")
+        st.success("✅ 剧本生成/阶段保存完毕！请点击下方黑框右上角的【两张纸】图标，一键复制后直接粘贴到飞书。")
         st.markdown("👇 **剧本一键提取区**")
         st.code(st.session_state.final_script, language="markdown")
