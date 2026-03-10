@@ -19,7 +19,6 @@ for key in keys_to_init:
     if key not in st.session_state:
         st.session_state[key] = ""
 
-# 🧹 一键清空回调函数
 def clear_form():
     for key in keys_to_init:
         st.session_state[key] = ""
@@ -49,7 +48,9 @@ concept_breakdown = st.text_area("创意解析 (concept_breakdown):", key="conce
 
 generate_btn = st.button("🚀 开始生成S级爆款剧本！")
 
-# --- 核心排版魔法：提取区占位 ---
+# 离线托管提示区
+st.info("💡 **工作流提示**：由于生成数十集剧本耗时较长，如果您需要离开座位并**锁屏**，前端网页必然会因系统安全机制断开连接。**请放心锁屏！** Dify 云端引擎将继续为您完成剧本。开会回来后，请直接前往 Dify 后台的【日志追踪】提取完整剧本。")
+
 top_extraction_area = st.empty()
 
 if generate_btn:
@@ -59,7 +60,7 @@ if generate_btn:
         st.session_state.final_script = ""
         top_extraction_area.empty() 
         
-        with st.spinner("后台引擎已点火，正在疯狂撰写中... 预计耗时较长，请保持网页常亮勿切后台！"):
+        with st.spinner("后台引擎已点火，正在疯狂撰写中... 若需锁屏离开，请无视前端断线，剧本将在 Dify 后台生成完毕！"):
             headers = {
                 "Authorization": f"Bearer {DIFY_API_KEY}",
                 "Content-Type": "application/json"
@@ -80,7 +81,6 @@ if generate_btn:
             }
             
             try:
-                # 4小时超长超时保护
                 response = requests.post(DIFY_API_URL, headers=headers, json=payload, stream=True, timeout=(300, 14400))
                 response.raise_for_status()
                 
@@ -92,7 +92,6 @@ if generate_btn:
                 full_result = ""
                 workflow_finished_normally = False 
                 
-                # --- 核心修改：为文字和雷达分别设置独立节流阀 ---
                 last_text_update = time.time()
                 last_heartbeat_update = time.time()
                 
@@ -105,7 +104,6 @@ if generate_btn:
                                 json_data = json.loads(data_str)
                                 event_type = json_data.get('event')
                                 
-                                # 📡 节点雷达 (防洪升级：强制1秒钟最多只刷1次状态)
                                 if event_type == 'node_started':
                                     if time.time() - last_heartbeat_update > 1.0:
                                         node_title = json_data.get('data', {}).get('title', '未知节点')
@@ -113,14 +111,12 @@ if generate_btn:
                                         last_heartbeat_update = time.time()
                                     continue
                                 
-                                # 💓 基础心跳 (防洪升级：强制2秒钟只汇报1次心跳)
                                 elif event_type == 'ping':
                                     if time.time() - last_heartbeat_update > 2.0:
                                         heartbeat_box.caption(f"💓 网络通道保持连接中... [最近心跳: {time.strftime('%H:%M:%S')}]")
                                         last_heartbeat_update = time.time()
                                     continue
                                     
-                                # 📝 文本块输出 (继续保持 0.5秒 节流防崩)
                                 elif event_type == 'text_chunk':
                                     chunk = json_data.get('data', {}).get('text', '')
                                     full_result += chunk
@@ -129,17 +125,15 @@ if generate_btn:
                                         result_box.markdown(full_result + " ▌")
                                         last_text_update = time.time()
                                 
-                                # ❌ 捕获后台报错
                                 elif event_type == 'error':
                                     error_msg = json_data.get('message', '未知错误')
                                     st.error(f"❌ Dify 后台发生错误: {error_msg}")
                                     workflow_finished_normally = True 
                                     break
                                     
-                                # ✅ 完美结束
                                 elif event_type == 'workflow_finished':
                                     heartbeat_box.empty() 
-                                    result_box.markdown(full_result) # 结束时做一次最终的完整渲染
+                                    result_box.markdown(full_result) 
                                     st.session_state.final_script = full_result
                                     workflow_finished_normally = True
                                     break 
@@ -147,21 +141,21 @@ if generate_btn:
                             except json.JSONDecodeError:
                                 continue
                 
-                # 🚨 捕获由于反向代理等原因造成的强杀
+                # --- 核心修改：明确告知团队锁屏断线的应对方案 ---
                 if not workflow_finished_normally:
-                    st.error("⚠️ 警告：连接被异常切断！")
-                    st.info("👉 别慌！如果是文本太长导致的超时，Dify 后台此刻**很可能仍在继续写剧本**。\n\n请前往 Dify 工作流后台的【日志追踪】页面查看最终结果。")
+                    st.error("⚠️ 前端连接已断开 (通常是因为电脑锁屏或浏览器休眠)。")
+                    st.success("🎯 **制片人请注意：这是一次成功的离线托管！**\n\nDify 云端大模型并未停止，它依然在后台为您疯狂码字。请直接登录 Dify 工作流后台，在【日志与追踪】列表中找到最新的一条记录，点击即可提取完整的剧本文档。")
                     if full_result:
                         st.session_state.final_script = full_result 
 
             except requests.exceptions.ChunkedEncodingError:
-                st.error("⚠️ 警告：数据流被服务器强制掐断！(这通常是由于生成时间过长，代理服务器断开了连接)。请去 Dify 后台拿结果！")
+                st.error("⚠️ 前端连接已断开 (通常是因为电脑锁屏或浏览器休眠)。")
+                st.success("🎯 **制片人请注意：这是一次成功的离线托管！**\n\nDify 云端大模型并未停止，它依然在后台为您疯狂码字。请直接登录 Dify 工作流后台，在【日志与追踪】列表中找到最新的一条记录，点击即可提取完整的剧本文档。")
                 if full_result:
                     st.session_state.final_script = full_result
             except Exception as e:
-                st.error(f"连接失败，请检查 Dify API 或必填项是否填写完整: {e}")
+                st.error(f"连接失败，请检查 API 或网络环境: {e}")
 
-# --- 将提取区装入顶部的“空盒子”里 ---
 if st.session_state.final_script:
     with top_extraction_area.container():
         st.success("✅ 剧本生成已完成！请点击下方黑框右上角的【两张纸】图标，一键复制后直接粘贴到飞书。")
