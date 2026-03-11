@@ -62,11 +62,11 @@ if generate_btn:
         st.session_state.final_script = ""
         top_extraction_area.empty() 
         
-        with st.spinner("后台引擎已点火，正在疯狂撰写中... (已开启协议级防断线保护)"):
+        with st.spinner("后台引擎已点火，正在疯狂撰写中... (剧本全集+质检数据量极大，请耐心等待)"):
             headers = {
                 "Authorization": f"Bearer {DIFY_API_KEY}",
                 "Content-Type": "application/json",
-                "Connection": "keep-alive" # 强制声明保持连接
+                "Connection": "keep-alive" 
             }
             
             payload = {
@@ -85,22 +85,24 @@ if generate_btn:
             
             # --- 核心升级：装载底层重试与保活适配器 ---
             session = requests.Session()
-            # 针对握手阶段的重试机制
             retry = Retry(connect=5, backoff_factor=0.5)
             adapter = HTTPAdapter(max_retries=retry)
             session.mount('http://', adapter)
             session.mount('https://', adapter)
             
             try:
-                # 4小时超长超时保护
+                # 发起请求
                 response = session.post(DIFY_API_URL, headers=headers, json=payload, stream=True, timeout=(300, 14400))
                 response.raise_for_status()
                 
                 st.markdown("### 📜 剧本流式输出实时预览")
                 st.divider()
                 
-                result_box = st.empty()
+                # UI 组件占位
+                run_id_box = st.empty()
                 heartbeat_box = st.empty()
+                result_box = st.empty()
+                
                 full_result = ""
                 workflow_finished_normally = False 
                 
@@ -109,7 +111,8 @@ if generate_btn:
                 last_heartbeat_update = time.time()
                 last_save_time = time.time()
                 
-                for line in response.iter_lines(decode_unicode=True):
+                # 优化：增加 chunk_size=1 防止本地 socket 缓冲假死
+                for line in response.iter_lines(decode_unicode=True, chunk_size=1):
                     if line:
                         if line.startswith('data:'):
                             data_str = line[5:].strip()
@@ -117,20 +120,23 @@ if generate_btn:
                                 json_data = json.loads(data_str)
                                 event_type = json_data.get('event')
                                 
+                                # 💎 杀手锏 1：捕获任务 ID
+                                if event_type == 'workflow_started':
+                                    workflow_run_id = json_data.get('workflow_run_id', '未知')
+                                    run_id_box.success(f"🔖 任务追踪防丢编号: **{workflow_run_id}** (如果前台断线，去 Dify 后台【日志】搜此号即可无损提取完整剧本！)")
+                                
                                 # 📡 节点雷达
-                                if event_type == 'node_started':
+                                elif event_type == 'node_started':
                                     if time.time() - last_heartbeat_update > 1.0:
                                         node_title = json_data.get('data', {}).get('title', '未知节点')
-                                        heartbeat_box.info(f"⚙️ 底层节点: 【{node_title}】运转中... [时间: {time.strftime('%H:%M:%S')}]")
+                                        heartbeat_box.info(f"⚙️ 底层节点: 【{node_title}】运转中... (如遇卡顿，是大模型在深度阅读几万字上下文，请勿刷新) [时间: {time.strftime('%H:%M:%S')}]")
                                         last_heartbeat_update = time.time()
-                                    continue
                                 
                                 # 💓 基础心跳
                                 elif event_type == 'ping':
                                     if time.time() - last_heartbeat_update > 2.0:
                                         heartbeat_box.caption(f"💓 服务器通信保持中... [最近心跳: {time.strftime('%H:%M:%S')}]")
                                         last_heartbeat_update = time.time()
-                                    continue
                                     
                                 # 📝 文本块输出
                                 elif event_type == 'text_chunk':
@@ -168,22 +174,23 @@ if generate_btn:
                 
                 # 🚨 捕获由于服务器硬超时造成的强杀
                 if not workflow_finished_normally:
-                    st.warning("⚠️ 警告：连接在生成尾声被服务器强行掐断 (通常是触发了底层网关的 30/60分钟 超时机制)！")
-                    st.info("👉 已为你保留断线前的所有剧本内容。如果缺失了最后几集，建议前往 Dify 后台查看日志，或手动补跑最后几集。")
+                    st.warning("⚠️ 前台展示连接已被云网关强制断开（由于总运行时间触及15分钟物理极限）！")
+                    st.info("👉 **别慌！剧本并没有丢失！** Dify 后台其实仍在继续为你完成最终的质检和资料生成。请等待 3-5 分钟后，前往 Dify 后台的【日志追踪】，凭顶部的“任务追踪防丢编号”直接复制最终成果。已为你保存断线前的进度在下方。")
                     if full_result:
                         st.session_state.final_script = full_result 
 
             except requests.exceptions.ReadTimeout:
-                st.error("⏳ 触发读取超时！Dify 处理时间过长，未能在设定时间内传回数据。")
-                if full_result:
+                st.error("⏳ 触发读取超时！大模型阅读2万字上下文耗时过久，未能及时传回数据。请去 Dify 后台提取。")
+                if 'full_result' in locals() and full_result:
                     st.session_state.final_script = full_result
             except (requests.exceptions.ChunkedEncodingError, requests.exceptions.ConnectionError):
-                st.error("🔌 触发强制熔断！服务器底层网关切断了这一条存活过久的超长连接。")
-                if full_result:
+                st.warning("🔌 触发网关强制熔断！大模型节点运行时间过长，触碰了云端 15 分钟的存活死线。")
+                st.info("👉 Dify 后台引擎仍在无头运行，请稍后前往 Dify 日志中获取最终资料包！")
+                if 'full_result' in locals() and full_result:
                     st.session_state.final_script = full_result
                     result_box.markdown(full_result)
             except Exception as e:
-                st.error(f"连接失败: {e}")
+                st.error(f"连接异常: {e}")
                 if 'full_result' in locals() and full_result:
                     st.session_state.final_script = full_result
             finally:
@@ -192,6 +199,6 @@ if generate_btn:
 # --- 将提取区装入顶部的“空盒子”里 ---
 if st.session_state.final_script:
     with top_extraction_area.container():
-        st.success("✅ 剧本生成阶段结束！请提取下方内容。如果被强制截断，请留意最后几集的连贯性。")
+        st.success("✅ 当前截获的内容已保存！如果内容不完整（比如缺少末尾资料库），说明触碰了物理超时，请去 Dify 后台取件！")
         st.markdown("👇 **剧本一键提取区**")
         st.code(st.session_state.final_script, language="markdown")
