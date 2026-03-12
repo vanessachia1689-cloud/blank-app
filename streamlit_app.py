@@ -13,9 +13,11 @@ DIFY_API_URL = "https://api.dify.ai/v1/workflows/run"
 st.set_page_config(page_title="AI短剧剧本生成器", page_icon="🎬", layout="centered")
 
 # --- 必备护城河：装上“记忆芯片”并绑定输入框 ---
+# 【修改点】增加了 character_ecosystem
 keys_to_init = [
     "final_script", "drama_title", "story_genre", "target_audience",
-    "drama_story", "story_background", "tiktok_elements", "concept_breakdown"
+    "story_background", "character_ecosystem", "drama_story", 
+    "tiktok_elements", "concept_breakdown"
 ]
 for key in keys_to_init:
     if key not in st.session_state:
@@ -38,16 +40,19 @@ with col_sub:
 with col_clear:
     st.button("🗑️ 一键清空", on_click=clear_form, use_container_width=True)
 
+# 【修改点】严格按照要求的 8 个字段顺序重新排版，并更新了 Label 名称
 col1, col2 = st.columns(2)
 with col1:
-    drama_title = st.text_input("剧名 (drama_title):", key="drama_title", placeholder="例如：My Zombie Bodyguard")
-    story_genre = st.text_input("故事类型 (story_genre):", key="story_genre", placeholder="例如：狼人/吸血鬼/复仇")
+    drama_title = st.text_input("创意名称 (drama_title):", key="drama_title", placeholder="例如：My Zombie Bodyguard")
+    target_audience = st.text_input("受众 (target_audience):", key="target_audience", placeholder="例如：18-35岁北美女性")
 with col2:
-    target_audience = st.text_input("目标受众 (target_audience):", key="target_audience", placeholder="例如：18-35岁北美女性")
+    story_genre = st.text_input("故事类型 (story_genre):", key="story_genre", placeholder="例如：狼人/吸血鬼/复仇")
 
-drama_story = st.text_area("三幕剧故事创意 (drama_story):", key="drama_story", height=150)
+# 文本域按从上到下的逻辑顺序排列
 story_background = st.text_area("故事背景 (story_background):", key="story_background", height=100)
-tiktok_elements = st.text_area("TT核心爆点元素 (tiktok_elements):", key="tiktok_elements", height=100)
+character_ecosystem = st.text_area("人物小传及羁绊 (character_ecosystem):", key="character_ecosystem", height=150)
+drama_story = st.text_area("三幕格式创意 (drama_story):", key="drama_story", height=150)
+tiktok_elements = st.text_area("提取的TikTok爆款元素 (tiktok_elements):", key="tiktok_elements", height=100)
 concept_breakdown = st.text_area("创意解析 (concept_breakdown):", key="concept_breakdown", height=100)
 
 generate_btn = st.button("🚀 开始生成S级爆款剧本！")
@@ -57,7 +62,7 @@ top_extraction_area = st.empty()
 
 if generate_btn:
     if not drama_title or not drama_story:
-        st.warning("导演，至少得填一下剧名和故事创意呀！")
+        st.warning("导演，至少得填一下创意名称和三幕格式创意呀！")
     else:
         st.session_state.final_script = ""
         top_extraction_area.empty() 
@@ -69,13 +74,15 @@ if generate_btn:
                 "Connection": "keep-alive" 
             }
             
+            # 【修改点】向 Dify 发送的 payload 中加入新增的 character_ecosystem 变量，顺序与 UI 保持一致
             payload = {
                 "inputs": {
                     "drama_title": drama_title,
-                    "drama_story": drama_story,
                     "story_genre": story_genre,
                     "target_audience": target_audience,
                     "story_background": story_background,
+                    "character_ecosystem": character_ecosystem,
+                    "drama_story": drama_story,
                     "tiktok_elements": tiktok_elements,
                     "concept_breakdown": concept_breakdown
                 },
